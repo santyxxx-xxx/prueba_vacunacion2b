@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'sectores_screen.dart';
-import 'crear_usuario_screen.dart';
 import '../../widgets/logout_button.dart';
 import 'asignar_sector_screen.dart';
 import '../../theme/app_theme.dart';
+import 'crear_usuario_screen.dart';
 
 class CoordinadorScreen extends StatefulWidget {
   const CoordinadorScreen({super.key});
@@ -26,16 +26,25 @@ class _CoordinadorScreenState extends State<CoordinadorScreen> {
   }
 
   Future<void> cargarDatos() async {
-    final datos = await Supabase.instance.client.from("vacunaciones").select();
+    try {
+      final datos = await Supabase.instance.client.from("vacunaciones").select();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      total = datos.length;
-      perros = datos.where((e) => e["tipo_mascota"] == "Perro").length;
-      gatos = datos.where((e) => e["tipo_mascota"] == "Gato").length;
-      loading = false;
-    });
+      setState(() {
+        total = datos.length;
+        perros = datos.where((e) => e["tipo_mascota"] == "Perro").length;
+        gatos = datos.where((e) => e["tipo_mascota"] == "Gato").length;
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => loading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al cargar datos: $e")),
+      );
+    }
   }
 
   Widget tarjeta(String titulo, int valor, IconData icono, Color color) {
@@ -88,10 +97,10 @@ class _CoordinadorScreenState extends State<CoordinadorScreen> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          : RefreshIndicator(
+              onRefresh: cargarDatos,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
                   const Text(
                     "Resumen general",
@@ -154,13 +163,15 @@ class _CoordinadorScreenState extends State<CoordinadorScreen> {
                   const SizedBox(height: 12),
 
                   botonMenu(
-                    texto: "Crear usuarios",
-                    icono: Icons.person_add_alt_1,
+                    texto: "Crear brigada",
+                    icono: Icons.groups_outlined,
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const CrearUsuarioScreen(),
+                          builder: (_) => const CrearUsuarioScreen(
+                            rolFijo: "brigada",
+                          ),
                         ),
                       );
                     },

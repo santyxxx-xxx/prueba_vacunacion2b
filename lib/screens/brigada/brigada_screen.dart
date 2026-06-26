@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/logout_button.dart';
+import '../coordinador/crear_usuario_screen.dart';
 
 class BrigadaScreen extends StatefulWidget {
   const BrigadaScreen({super.key});
@@ -12,23 +13,26 @@ class BrigadaScreen extends StatefulWidget {
 
 class _BrigadaScreenState extends State<BrigadaScreen> {
   Map<String, dynamic>? usuario;
-  List vacunadores = [];
+
+  int total = 0;
+  int perros = 0;
+  int gatos = 0;
 
   bool cargando = true;
-  String? error;
+  String sector = "Sin sector asignado";
 
   @override
   void initState() {
     super.initState();
-    cargarUsuario();
+    cargarDashboard();
   }
 
-  Future<void> cargarUsuario() async {
+  Future<void> cargarDashboard() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
 
       if (user == null) {
-        throw "No hay usuario con sesión iniciada.";
+        throw "No hay sesión iniciada.";
       }
 
       final data = await Supabase.instance.client
@@ -41,28 +45,59 @@ class _BrigadaScreenState extends State<BrigadaScreen> {
         throw "No se encontró el usuario en la tabla usuarios.";
       }
 
-      final listaVacunadores = await Supabase.instance.client
-          .from("usuarios")
+      final sectorId = data["sector_id"];
+
+      final vacunaciones = await Supabase.instance.client
+          .from("vacunaciones")
           .select()
-          .eq("rol", "vacunador")
-          .eq("sector_id", data["sector_id"]);
+          .eq("sector_id", sectorId);
 
       if (!mounted) return;
 
       setState(() {
         usuario = data;
-        vacunadores = listaVacunadores;
+        sector = sectorId?.toString() ?? "Sin sector asignado";
+        total = vacunaciones.length;
+        perros = vacunaciones.where((v) => v["tipo_mascota"] == "Perro").length;
+        gatos = vacunaciones.where((v) => v["tipo_mascota"] == "Gato").length;
         cargando = false;
-        error = null;
       });
     } catch (e) {
       if (!mounted) return;
 
-      setState(() {
-        cargando = false;
-        error = e.toString();
-      });
+      setState(() => cargando = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al cargar dashboard: $e")),
+      );
     }
+  }
+
+  Widget tarjeta(String titulo, int valor, IconData icono, Color color) {
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.15),
+          child: Icon(icono, color: color),
+        ),
+        title: Text(
+          titulo,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
+          ),
+        ),
+        trailing: Text(
+          valor.toString(),
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.navy,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -71,82 +106,19 @@ class _BrigadaScreenState extends State<BrigadaScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text("Brigada"),
-          actions: const [
-            LogoutButton(),
-          ],
+          actions: const [LogoutButton()],
         ),
         body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (error != null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text("Brigada"),
-          actions: const [
-            LogoutButton(),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 54,
-                      color: Colors.redAccent,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "No se pudo cargar Brigada",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.text),
-                    ),
-                    const SizedBox(height: 18),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          cargando = true;
-                          error = null;
-                        });
-                        cargarUsuario();
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text("Intentar de nuevo"),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Brigada"),
-        actions: const [
-          LogoutButton(),
-        ],
+        actions: const [LogoutButton()],
       ),
       body: RefreshIndicator(
-        onRefresh: cargarUsuario,
+        onRefresh: cargarDashboard,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -170,14 +142,11 @@ class _BrigadaScreenState extends State<BrigadaScreen> {
                         children: [
                           const Text(
                             "Sector asignado",
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.text,
-                            ),
+                            style: TextStyle(color: AppColors.text),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "${usuario?["sector_id"] ?? "Ninguno"}",
+                            sector,
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w800,
@@ -192,12 +161,29 @@ class _BrigadaScreenState extends State<BrigadaScreen> {
               ),
             ),
 
-            const SizedBox(height: 22),
+            const SizedBox(height: 16),
+
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CrearUsuarioScreen(
+                      rolFijo: "vacunador",
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text("Crear vacunador"),
+            ),
+
+            const SizedBox(height: 24),
 
             const Text(
-              "Vacunadores",
+              "Dashboard del sector",
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: AppColors.navy,
               ),
@@ -205,43 +191,26 @@ class _BrigadaScreenState extends State<BrigadaScreen> {
 
             const SizedBox(height: 10),
 
-            if (vacunadores.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 80),
-                child: Center(
-                  child: Text(
-                    "No hay vacunadores asignados a este sector.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.text),
-                  ),
-                ),
-              )
-            else
-              ...vacunadores.map((v) {
-                return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.sky,
-                      child: Icon(
-                        Icons.person_outline,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                    title: Text(
-                      "${v["nombres"] ?? "Sin nombre"} ${v["apellidos"] ?? ""}",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                    subtitle: Text(v["correo"] ?? ""),
-                  ),
-                );
-              }),
+            tarjeta(
+              "Total vacunaciones",
+              total,
+              Icons.vaccines,
+              AppColors.blue,
+            ),
+
+            tarjeta(
+              "Perros vacunados",
+              perros,
+              Icons.pets,
+              AppColors.navy,
+            ),
+
+            tarjeta(
+              "Gatos vacunados",
+              gatos,
+              Icons.cruelty_free,
+              const Color(0xFFC69A4A),
+            ),
           ],
         ),
       ),
